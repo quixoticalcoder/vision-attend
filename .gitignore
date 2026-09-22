@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.DS_Store
+Data/
+attendance.csv
+
+# Local UI assets and additional attendance exports
+Photo
+attendance.jpeg
+attendance1.csv
+bg.webp
+college.webp
+customercare.png
+developer.png
+exit.png
+face.jpeg
+photo.png
+Stanford.jpeg
+student.jpeg
+traindata.jpeg
