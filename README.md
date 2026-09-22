@@ -4,7 +4,7 @@
 
 vision-attend uses Tkinter for its interface, MySQL for student and account records, and OpenCV for face detection and LBPH recognition. Its main workflow captures face samples, trains a local classifier, looks up recognized student IDs, and writes attendance rows to a CSV file.
 
-**Current status:** the repository contains the application code, a Haar face detector, and a saved LBPH classifier. Most decorative UI images, the training-image directory, and database schema/data are missing. A fresh checkout is not a complete runnable installation until those resources are supplied. There is no included demonstration video.
+**Current status:** the repository contains the application code, a Haar face detector, and a saved LBPH classifier. Most decorative UI images, the training-image directory, and database schema/data are missing. A fresh checkout is not a complete runnable installation until those resources are supplied. 
 
 ## Contents
 
