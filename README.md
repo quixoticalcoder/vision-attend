@@ -4,9 +4,11 @@
 
 vision-attend uses Tkinter for its interface, MySQL for student and account records, and OpenCV for face detection and LBPH recognition. Its main workflow captures face samples, trains a local classifier, looks up recognized student IDs, and writes attendance rows to a CSV file.
 
-**Desktop edition status:** the repository contains the application code, a Haar face detector, and a saved LBPH classifier. Most decorative UI images, the training-image directory, and database schema/data are missing. The desktop edition needs those resources. The browser edition below is independently runnable without them. 
+**Desktop edition status:** the repository contains the application code, a Haar face detector, and a saved LBPH classifier. Most decorative UI images, the training-image directory, and database schema/data are missing. The desktop edition needs those resources. The browser edition below is independently runnable without them.
 
 ## Browser edition — free deployment
+
+**Live application:** [Open Vision Attend](https://vision-attend-a43s.onrender.com/) — no login required.
 
 The new browser edition is a self-contained FastAPI application under `web/`. It provides camera capture or JPEG/PNG upload, enrollment of up to ten students with three photos each, session-specific LBPH training, recognition suggestions, explicit human confirmation, per-student daily attendance deduplication (UTC), and CSV export.
 
