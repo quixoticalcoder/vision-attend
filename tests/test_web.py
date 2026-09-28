@@ -93,3 +93,11 @@ def test_frontend_and_health(client):
     assert 'Vision Attend' in result.text
     assert "frame-ancestors 'none'" in result.headers['content-security-policy']
     assert client.get('/static/app.js').status_code==200
+
+
+def test_student_id_normalizes_spaces_and_typographic_dashes(client):
+    with patch('web.app.extract_face', return_value=np.zeros((160,160),dtype=np.uint8)):
+        result=client.post('/api/enroll',headers=HEADERS,json={'id':' STU –006 ','name':'Test Student','consent':True,'images':['image']*3})
+    assert result.status_code==200
+    assert result.json()['student']['id']=='STU-006'
+    assert client.get('/api/session').json()['students'][0]['id']=='STU-006'

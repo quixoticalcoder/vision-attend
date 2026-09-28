@@ -16,7 +16,7 @@ import numpy as np
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from PIL import Image, UnidentifiedImageError
 
 ROOT = Path(__file__).resolve().parent
@@ -141,6 +141,13 @@ class Enrollment(BaseModel):
     department: str = Field(default='', max_length=80)
     consent: bool
     images: list[str] = Field(min_length=3, max_length=3)
+
+    @field_validator('id', mode='before')
+    @classmethod
+    def normalize_id(cls, value):
+        if isinstance(value, str):
+            return ''.join(value.split()).translate(str.maketrans({'–': '-', '—': '-', '−': '-'}))
+        return value
 
 
 class Capture(BaseModel):
