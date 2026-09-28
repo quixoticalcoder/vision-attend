@@ -1,10 +1,42 @@
 # vision-attend
 
-**A Python desktop prototype for student records, face recognition, and CSV attendance management.**
+**Browser and desktop attendance prototypes with OpenCV face recognition and human-reviewed attendance.**
 
 vision-attend uses Tkinter for its interface, MySQL for student and account records, and OpenCV for face detection and LBPH recognition. Its main workflow captures face samples, trains a local classifier, looks up recognized student IDs, and writes attendance rows to a CSV file.
 
-**Current status:** the repository contains the application code, a Haar face detector, and a saved LBPH classifier. Most decorative UI images, the training-image directory, and database schema/data are missing. A fresh checkout is not a complete runnable installation until those resources are supplied. 
+**Desktop edition status:** the repository contains the application code, a Haar face detector, and a saved LBPH classifier. Most decorative UI images, the training-image directory, and database schema/data are missing. The desktop edition needs those resources. The browser edition below is independently runnable without them. 
+
+## Browser edition — free deployment
+
+The new browser edition is a self-contained FastAPI application under `web/`. It provides camera capture or JPEG/PNG upload, enrollment of up to ten students with three photos each, session-specific LBPH training, recognition suggestions, explicit human confirmation, per-student daily attendance deduplication (UTC), and CSV export.
+
+It does not use the desktop MySQL database or the bundled classifier, whose identity mapping is unknown. Each visitor receives an isolated random session cookie. Photos are processed on the hosting server; normalized face samples, learned descriptors, student details, and attendance are held only in process memory. They expire within 31 minutes of inactivity, can be cleared by the user, and disappear on server restart. Export attendance before leaving. No cross-device synchronization or durable storage is provided.
+
+Recognition uses Haar face detection and LBPH distance with a conservative heuristic threshold of 65; this is not a calibrated confidence probability. The prototype has no liveness detection or measured accuracy and must not be used for official attendance decisions. Users must have permission from the photographed person. Recognition never writes attendance without a separate confirmation.
+
+### Run the web app
+
+```bash
+python3.11 -m venv .venv-web
+source .venv-web/bin/activate
+pip install -r requirements-web.txt
+COOKIE_SECURE=false uvicorn web.app:app --host 127.0.0.1 --port 8000
+```
+
+Open `http://localhost:8000`. Camera access requires localhost or HTTPS. The camera is optional; photo upload works as an alternative. For hosted deployment retain `COOKIE_SECURE=true` and use one worker because session state lives in memory.
+
+### Deploy on Render
+
+Create a Blueprint from this repository. `render.yaml` defines a free Python web service; no database, password, API key, or paid service is needed. The health endpoint is `/health`. The free service may sleep during inactivity. At most 16 active sessions are retained to bound memory usage; additional visitors receive a capacity message until sessions expire.
+
+### Browser-edition checks
+
+```bash
+pip install pytest httpx
+python -m pytest tests -q
+```
+
+Tests cover actual LBPH training/prediction with synthetic arrays, explicit confirmation, deduplication, session isolation and expiry, consent, request size limits, invalid images, and CSV formula escaping. Synthetic tests do not establish real-world face-recognition accuracy. Desktop setup and its pre-existing limitations are documented below.
 
 ## Contents
 
@@ -32,7 +64,7 @@ vision-attend uses Tkinter for its interface, MySQL for student and account reco
 | Accounts | Registration, database-backed login, and security-question password reset screens. |
 | Supporting windows | Help and project information windows. |
 
-These are local desktop workflows. The project has no web server, REST API, hosted dashboard, cloud synchronization, or measured recognition accuracy.
+The table above describes the original desktop workflows. The browser edition is separate; neither edition has measured recognition accuracy or cloud synchronization.
 
 ## Architecture
 
