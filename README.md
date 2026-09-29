@@ -8,12 +8,12 @@ vision-attend uses Tkinter for its interface, MySQL for student and account reco
 
 ## Open live application
 
-https://vision-attend-a43s.onrender.com
+https://vision-attend-a43s.onrender.com - no login required
 
 
 ## Browser edition — free deployment
 
-**Live application:** [Open Vision Attend](https://vision-attend-a43s.onrender.com/) — no login required.
+
 
 The new browser edition is a self-contained FastAPI application under `web/`. It provides camera capture or JPEG/PNG upload, enrollment of up to ten students with three photos each, session-specific LBPH training, recognition suggestions, explicit human confirmation, per-student daily attendance deduplication (UTC), and CSV export.
 
