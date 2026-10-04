@@ -101,3 +101,95 @@ def test_student_id_normalizes_spaces_and_typographic_dashes(client):
     assert result.status_code==200
     assert result.json()['student']['id']=='STU-006'
     assert client.get('/api/session').json()['students'][0]['id']=='STU-006'
+
+
+def test_separate_training_and_gallery_are_session_isolated(client):
+    sample = np.random.default_rng(9).integers(0, 256, (160, 160), dtype=np.uint8)
+    assert client.post('/api/train', headers=HEADERS).status_code == 409
+    with patch('web.app.extract_face', return_value=sample):
+        result = client.post('/api/enroll', headers=HEADERS, json={
+            'id': 'S1', 'name': ' Student One ', 'department': ' Science ',
+            'roll_number': 'R1', 'course': 'BSc', 'consent': True,
+            'images': ['image'] * 3, 'train': False})
+        assert result.status_code == 200
+        state = client.get('/api/session').json()
+        assert not state['model_ready'] and state['sample_count'] == 3
+        assert state['students'][0]['name'] == 'Student One'
+        assert state['students'][0]['roll_number'] == 'R1'
+        assert client.post('/api/recognize', headers=HEADERS,
+                           json={'image': 'image', 'consent': True}).status_code == 409
+        gallery = client.get('/api/photos').json()['groups']
+        assert len(gallery) == 1 and len(gallery[0]['images']) == 3
+        decoded = Image.open(io.BytesIO(base64.b64decode(gallery[0]['images'][0].split(',')[1])))
+        assert decoded.size == (160, 160)
+        other = TestClient(app, base_url='https://testserver')
+        assert other.get('/api/photos').json()['groups'] == []
+        assert client.post('/api/train', headers=HEADERS).status_code == 200
+        assert client.get('/api/session').json()['model_ready']
+        match = client.post('/api/recognize', headers=HEADERS,
+                            json={'image': 'image', 'consent': True}).json()
+        assert match['matched'] and match['student']['id'] == 'S1'
+
+
+def test_student_edits_invalidate_pending_but_preserve_attendance(client):
+    sample = np.zeros((160, 160), dtype=np.uint8)
+    with patch('web.app.extract_face', return_value=sample):
+        enroll(client)
+        match = client.post('/api/recognize', headers=HEADERS,
+                            json={'image': 'image', 'consent': True}).json()
+        client.post('/api/attendance', headers=HEADERS, json={'token': match['token']})
+        match = client.post('/api/recognize', headers=HEADERS,
+                            json={'image': 'image', 'consent': True}).json()
+        updated = client.put('/api/students/S1', headers=HEADERS,
+                             json={'name': 'Corrected Name', 'department': 'Math', 'roll_number': 'R2'})
+        assert updated.status_code == 200
+        assert updated.json()['student']['sample_count'] == 3
+        assert client.post('/api/attendance', headers=HEADERS,
+                           json={'token': match['token']}).status_code == 409
+        state = client.get('/api/session').json()
+        assert state['students'][0]['name'] == 'Corrected Name'
+        assert state['attendance'][0]['name'] == 'Student One'
+        assert state['model_ready']
+        assert client.put('/api/students/S1', headers=HEADERS, json={'name': '   '}).status_code == 422
+        assert client.put('/api/students/missing', headers=HEADERS, json={'name': 'Test'}).status_code == 404
+
+
+def test_removal_retrains_label_mapping_and_preserves_records(client):
+    first = np.random.default_rng(2).integers(0, 256, (160, 160), dtype=np.uint8)
+    second = np.zeros((160, 160), dtype=np.uint8)
+    with patch('web.app.extract_face', return_value=first):
+        enroll(client)
+        match = client.post('/api/recognize', headers=HEADERS,
+                            json={'image': 'image', 'consent': True}).json()
+        client.post('/api/attendance', headers=HEADERS, json={'token': match['token']})
+    with patch('web.app.extract_face', return_value=second):
+        client.post('/api/enroll', headers=HEADERS, json={
+            'id': 'S2', 'name': 'Student Two', 'consent': True, 'images': ['image'] * 3})
+        match = client.post('/api/recognize', headers=HEADERS,
+                            json={'image': 'image', 'consent': True}).json()
+        assert client.delete('/api/students/S1', headers=HEADERS).status_code == 200
+        state = client.get('/api/session').json()
+        assert not state['model_ready'] and len(state['attendance']) == 1
+        assert state['sample_count'] == 3
+        assert client.post('/api/attendance', headers=HEADERS,
+                           json={'token': match['token']}).status_code == 409
+        assert client.post('/api/recognize', headers=HEADERS,
+                           json={'image': 'image', 'consent': True}).status_code == 409
+        client.post('/api/train', headers=HEADERS)
+        match = client.post('/api/recognize', headers=HEADERS,
+                            json={'image': 'image', 'consent': True}).json()
+        assert match['student']['id'] == 'S2'
+        assert client.delete('/api/students/S1', headers=HEADERS).status_code == 404
+
+
+def test_student_and_training_mutations_enforce_session_boundaries(client):
+    with patch('web.app.extract_face', return_value=np.zeros((160, 160), dtype=np.uint8)):
+        enroll(client)
+    other = TestClient(app, base_url='https://testserver')
+    assert other.put('/api/students/S1', headers=HEADERS, json={'name': 'Wrong'}).status_code == 404
+    assert other.delete('/api/students/S1', headers=HEADERS).status_code == 404
+    assert other.post('/api/train', headers=HEADERS).status_code == 409
+    assert client.post('/api/train').status_code == 403
+    assert client.put('/api/students/S1', json={'name': 'Wrong'}).status_code == 403
+    assert client.delete('/api/students/S1').status_code == 403
+    assert client.get('/api/session').json()['students'][0]['name'] == 'Student One'

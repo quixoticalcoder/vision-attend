@@ -132,15 +132,40 @@ def extract_face(encoded):
 
 
 def public_student(student):
-    return {key: student[key] for key in ('id', 'name', 'department')}
+    return {**{key: student.get(key, '') for key in ('id', 'name', 'department', 'roll_number', 'course')},
+            'sample_count': len(student['samples'])}
 
 
-class Enrollment(BaseModel):
-    id: str = Field(min_length=1, max_length=40, pattern=r'^[A-Za-z0-9_-]+$')
+def train_students(students):
+    faces, labels = [], []
+    for label, item in enumerate(students):
+        faces.extend(item['samples'])
+        labels.extend([label] * len(item['samples']))
+    model = cv2.face.LBPHFaceRecognizer_create()
+    model.train(faces, np.array(labels, dtype=np.int32))
+    return model
+
+
+class StudentDetails(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     department: str = Field(default='', max_length=80)
+    roll_number: str = Field(default='', max_length=40)
+    course: str = Field(default='', max_length=80)
+
+    @field_validator('name', 'department', 'roll_number', 'course')
+    @classmethod
+    def clean_text(cls, value, info):
+        value = value.strip()
+        if info.field_name == 'name' and not value:
+            raise ValueError('Enter a student name.')
+        return value
+
+
+class Enrollment(StudentDetails):
+    id: str = Field(min_length=1, max_length=40, pattern=r'^[A-Za-z0-9_-]+$')
     consent: bool
     images: list[str] = Field(min_length=3, max_length=3)
+    train: bool = True  # Older browser clients continue to enroll and train together.
 
     @field_validator('id', mode='before')
     @classmethod
@@ -173,7 +198,9 @@ def health():
 def state(request: Request, response: Response):
     with LOCK:
         data = session(request, response)
-        return {'students': [public_student(s) for s in data['students']], 'attendance': data['attendance'], 'expires_after_minutes': 30}
+        return {'students': [public_student(s) for s in data['students']], 'attendance': data['attendance'],
+                'model_ready': data['model'] is not None, 'sample_count': sum(len(s['samples']) for s in data['students']),
+                'expires_after_minutes': 30}
 
 
 @app.post('/api/enroll')
@@ -189,16 +216,59 @@ def enroll(payload: Enrollment, request: Request, response: Response):
         if any(s['id'] == payload.id for s in data['students']):
             raise HTTPException(409, 'This student ID is already enrolled.')
         samples = [extract_face(img) for img in payload.images]
-        student = {'id': payload.id, 'name': payload.name.strip(), 'department': payload.department.strip(), 'samples': samples}
+        student = {**payload.model_dump(exclude={'images', 'consent', 'train'}), 'samples': samples}
         students = data['students'] + [student]
-        faces, labels = [], []
-        for label, item in enumerate(students):
-            faces.extend(item['samples'])
-            labels.extend([label] * len(item['samples']))
-        model = cv2.face.LBPHFaceRecognizer_create()
-        model.train(faces, np.array(labels, dtype=np.int32))
+        model = train_students(students) if payload.train else None
         data['students'], data['model'], data['pending'] = students, model, None
         return {'student': public_student(student), 'samples': 3}
+
+
+@app.post('/api/train')
+def train(request: Request, response: Response):
+    with LOCK:
+        data = session(request, response)
+        if not data['students']:
+            raise HTTPException(409, 'Add a student with three face samples before training.')
+        data['model'] = train_students(data['students'])
+        data['pending'] = None
+        return {'message': 'Model trained. Open Face Detector to recognize a student.'}
+
+
+@app.put('/api/students/{student_id}')
+def update_student(student_id: str, payload: StudentDetails, request: Request, response: Response):
+    with LOCK:
+        data = session(request, response)
+        student = next((s for s in data['students'] if s['id'] == student_id), None)
+        if student is None:
+            raise HTTPException(404, 'Student not found in this session.')
+        student.update(payload.model_dump())
+        data['pending'] = None
+        return {'student': public_student(student)}
+
+
+@app.delete('/api/students/{student_id}')
+def delete_student(student_id: str, request: Request, response: Response):
+    with LOCK:
+        data = session(request, response)
+        students = [s for s in data['students'] if s['id'] != student_id]
+        if len(students) == len(data['students']):
+            raise HTTPException(404, 'Student not found in this session.')
+        data['students'], data['model'], data['pending'] = students, None, None
+        return {'message': 'Student and face samples removed. Existing attendance is preserved. Train the remaining students again.'}
+
+
+@app.get('/api/photos')
+def photos(request: Request, response: Response):
+    with LOCK:
+        data = session(request, response)
+        result = []
+        for student in data['students']:
+            images = []
+            for sample in student['samples']:
+                _, encoded = cv2.imencode('.png', sample)
+                images.append('data:image/png;base64,' + base64.b64encode(encoded).decode())
+            result.append({'student': public_student(student), 'images': images})
+        return {'groups': result}
 
 
 @app.post('/api/recognize')
@@ -209,7 +279,7 @@ def recognize(payload: Capture, request: Request, response: Response):
         data = session(request, response)
         data['pending'] = None
         if data['model'] is None:
-            raise HTTPException(409, 'Enroll a student with three photos first.')
+            raise HTTPException(409, 'Add students and train the model in Train Data first.')
         face = extract_face(payload.image)
         label, distance = data['model'].predict(face)
         if distance > 65:
