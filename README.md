@@ -15,7 +15,17 @@ https://youtu.be/94YcejUg-9g?si=x8jYCCOI2byT-vKY
 
 
 
-The new browser edition is a self-contained FastAPI application under `web/`. It provides camera capture or JPEG/PNG upload, enrollment of up to ten students with three photos each, session-specific LBPH training, recognition suggestions, explicit human confirmation, per-student daily attendance deduplication (UTC), and CSV export.
+The browser edition is a self-contained FastAPI application under `web/`, organized around the desktop application's dashboard modules:
+
+- **Dashboard:** module navigation, a live local clock, student/sample totals, model readiness, and recent attendance.
+- **Student Details:** enroll up to ten students with three camera captures or JPEG/PNG photos each; edit names, departments, roll numbers and courses; remove a student and their samples.
+- **Train Data:** explicitly train the session's LBPH model. Adding or removing students invalidates the model and requires retraining. Editing profile details clears pending recognition; existing attendance retains its recorded details.
+- **Face Detector:** camera preview, single-frame or photo recognition, and live scanning every two seconds. Scanning pauses on a possible match or an error. A separate human confirmation records attendance once per student per UTC day. Camera capture stops when the tab is hidden or the user leaves capture screens.
+- **Photos:** inspect the normalized face crops used for this session's training.
+- **Attendance:** search and filter confirmed records by UTC date, then export CSV.
+- **Help, About, and Session Settings:** workflow guidance, project information, and session deletion.
+
+The dashboard follows the original project's module structure; it does not reproduce the reference video's exact appearance. Enrollment through the new interface saves samples before training; older API clients may continue using enrollment with automatic training.
 
 It does not use the desktop MySQL database or the bundled classifier, whose identity mapping is unknown. Each visitor receives an isolated random session cookie. Photos are processed on the hosting server; normalized face samples, learned descriptors, student details, and attendance are held only in process memory. They expire within 31 minutes of inactivity, can be cleared by the user, and disappear on server restart. Export attendance before leaving. No cross-device synchronization or durable storage is provided.
 
@@ -43,7 +53,7 @@ pip install pytest httpx
 python -m pytest tests -q
 ```
 
-Tests cover actual LBPH training/prediction with synthetic arrays, explicit confirmation, deduplication, session isolation and expiry, consent, request size limits, invalid images, and CSV formula escaping. Synthetic tests do not establish real-world face-recognition accuracy. Desktop setup and its pre-existing limitations are documented below.
+Tests cover actual LBPH training/prediction with synthetic arrays, explicit training, model invalidation and label remapping after removal, student edits, gallery isolation, explicit confirmation, deduplication, session isolation and expiry, consent, request size limits, invalid images, and CSV formula escaping. Synthetic tests do not establish real-world face-recognition accuracy. Desktop setup and its pre-existing limitations are documented below.
 
 ## Contents
 
@@ -266,7 +276,7 @@ python -m pip check
 python -c "import cv2; print(cv2.__version__); print(hasattr(cv2, 'face'))"
 ```
 
-No automated test suite is included. Syntax and model-loading checks do not establish that the GUI, camera, database, or identity mapping works end to end. Test those interactions on a graphical machine with disposable records and correctly labeled samples. Do not infer model quality from the presence of `classifier.xml`.
+Automated tests cover the browser edition; no automated desktop test suite is included. Syntax and model-loading checks do not establish that the GUI, camera, database, or identity mapping works end to end. Test those interactions on a graphical machine with disposable records and correctly labeled samples. Do not infer model quality from the presence of `classifier.xml`.
 
 ## Known limitations
 

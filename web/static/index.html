@@ -1,17 +1,595 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vision Attend · Attendance workspace</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
-<body>
-<header><a class="brand" href="/" aria-label="Vision Attend home"><span class="logo">V</span>vision<span class="light">attend</span></a><span class="edition"><i></i> Browser edition</span></header>
-<main>
-<section class="hero"><p class="eyebrow">FACE RECOGNITION / HUMAN CONFIRMATION</p><h1>A familiar face.<br>A simpler roll call.</h1><p class="intro">Enroll a student, capture a face, and review the match.<br>Attendance stays in your hands.</p><div class="stats"><div><strong id="student-count">0</strong><span>Enrolled students</span></div><div><strong id="attendance-count">0</strong><span>Attendance entries</span></div><div><strong>30 min</strong><span>Session idle limit</span></div></div></section>
-<aside class="notice"><strong>A private, temporary demonstration.</strong> Your photos are sent to this app’s server for OpenCV processing. Face samples and records are held in memory in your session, removed within 31 minutes of inactivity, and lost on a server restart. Up to 10 students. Export your CSV before leaving. This prototype has no liveness detection and is not validated for official attendance decisions.</aside>
-<div class="workspace">
-<section class="panel camera-panel"><div class="panel-title"><div><p class="eyebrow">01 / CAPTURE</p><h2>Your camera, your control</h2></div><span id="camera-status" class="pill">Camera off</span></div><div class="viewfinder"><video id="video" autoplay muted playsinline hidden></video><div id="camera-placeholder"><span class="frame-icon">⌗</span><h3>Ready when you are</h3><p>Enable your camera or select a photo below.<br>Use good lighting and keep one face in frame.</p></div></div><div class="camera-actions"><button id="start-camera" type="button">Enable camera</button><button id="stop-camera" class="secondary" type="button" disabled>Stop camera</button></div><p class="hint">Camera access starts only when you choose. Microphone access is never requested.</p><label class="consent"><input type="checkbox" id="consent"> I have permission from the person pictured to process their photos and record demonstration attendance.</label></section>
-<section class="panel"><div class="tabs" role="tablist" aria-label="Workflow"><button id="enroll-tab" role="tab" aria-selected="true" aria-controls="enroll-panel">02 / Enroll</button><button id="recognize-tab" role="tab" aria-selected="false" aria-controls="recognize-panel">03 / Recognize</button></div>
-<div id="enroll-panel" role="tabpanel" aria-labelledby="enroll-tab"><h2>Meet your students</h2><p class="muted">Add three clear photos with small changes in expression and angle. A fresh LBPH model is trained for this session.</p><form id="enroll-form"><div class="fields"><label>Student ID<input id="student-id" required maxlength="40"  placeholder="e.g. STU-001" title="Letters, numbers, hyphens and underscores. Spaces are removed automatically."></label><label>Student name<input id="student-name" required maxlength="80" placeholder="Full name"></label></div><label>Department <span class="muted">(optional)</span><input id="department" maxlength="80" placeholder="e.g. Computer Science"></label><div id="samples" class="samples" aria-label="Enrollment photos"></div><div class="row"><button type="button" id="capture-sample" class="secondary">Capture photo</button><label class="file-button">Choose photos<input type="file" id="enroll-upload" accept="image/jpeg,image/png" multiple></label><button type="button" class="text-button" id="reset-samples">Reset photos</button></div><p class="hint" id="sample-count">0 of 3 photos collected</p><button id="enroll-submit" type="submit" class="wide">Enroll & train model</button></form></div>
-<div id="recognize-panel" role="tabpanel" aria-labelledby="recognize-tab" hidden><h2>Review before recording</h2><p class="muted">Capture one face or choose a photo. A possible match is a suggestion, not a verified identity.</p><div class="row"><button id="recognize-capture" type="button">Capture & recognize</button><label class="file-button">Choose photo<input id="recognize-upload" type="file" accept="image/jpeg,image/png"></label></div><div id="match-result" class="match" hidden></div><button id="confirm-match" type="button" class="wide" hidden>Confirm this person & mark present</button><p class="hint">One attendance entry per student per UTC day. Lower LBPH distance means a closer match; it is not a probability.</p></div>
-<p id="message" class="message" role="status" aria-live="polite"></p></section>
-</div>
-<section class="panel records"><div class="panel-title"><div><p class="eyebrow">04 / RECORDS</p><h2>Your session at a glance</h2></div><a class="file-button" href="/api/export" download>Export attendance CSV ↗</a></div><div id="student-list" class="student-list"></div><div class="table-wrap"><table><thead><tr><th>Student</th><th>ID</th><th>Department</th><th>Date · UTC</th><th>Time · UTC</th><th>Status</th></tr></thead><tbody id="attendance-body"></tbody></table></div><p id="empty-records" class="empty">No attendance yet. Enroll a student and confirm a recognition result to begin.</p><details><summary>Clear this session</summary><p>This deletes your session’s face samples, trained model, students, and attendance. Export first if you need the records.</p><button id="clear-session" type="button" class="danger">Delete my session data</button></details></section>
-<footer><span>Vision Attend · OpenCV LBPH + Haar face detection</span><a href="https://github.com/quixoticalcoder/vision-attend" target="_blank" rel="noopener noreferrer">Explore the source ↗</a></footer>
-</main></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#142943" />
+    <title>Vision Attend · Face Recognition Attendance System</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to workspace</a>
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard"
+        ><span class="brand-mark" aria-hidden="true">V<span>·</span></span
+        ><span
+          >VISION<span class="brand-light">ATTEND</span
+          ><small>ATTENDANCE MANAGEMENT</small></span
+        ></a
+      >
+      <p class="nav-label">WORKSPACE</p>
+      <nav aria-label="Main navigation" id="navigation"></nav>
+      <div class="sidebar-bottom">
+        <span class="status-dot"></span> Browser workspace<small
+          >Your session is private to this browser.</small
+        ><a href="#settings">Session & data settings ↗</a>
+      </div>
+    </aside>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="breadcrumb">
+          Workspace <span>/</span> <strong id="breadcrumb">Dashboard</strong>
+        </div>
+        <div class="clock">
+          <span class="clock-face" aria-hidden="true">◷</span>
+          <div><time id="clock-time"></time><span id="clock-date"></span></div>
+        </div>
+      </header>
+      <main id="main" tabindex="-1">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">FACE RECOGNITION ATTENDANCE SYSTEM</p>
+            <h1 id="page-title">Dashboard</h1>
+            <p id="page-description">
+              Your attendance workspace. Everything in one place.
+            </p>
+          </div>
+          <span class="badge" id="model-badge">Model not trained</span>
+        </div>
+        <p
+          id="message"
+          class="message"
+          role="status"
+          aria-live="polite"
+          hidden
+        ></p>
+        <section
+          id="view-dashboard"
+          data-view="dashboard"
+          aria-label="Dashboard"
+        >
+          <div class="stats">
+            <article>
+              <span class="stat-icon blue" data-icon="students"></span>
+              <div>
+                <span>Enrolled students</span
+                ><strong id="student-count">0</strong
+                ><small>Up to 10 per session</small>
+              </div>
+            </article>
+            <article>
+              <span class="stat-icon green" data-icon="attendance"></span>
+              <div>
+                <span>Present today</span
+                ><strong id="attendance-count">0</strong
+                ><small>Confirmed attendance · UTC</small>
+              </div>
+            </article>
+            <article>
+              <span class="stat-icon violet" data-icon="photos"></span>
+              <div>
+                <span>Face samples</span><strong id="photo-count">0</strong
+                ><small>3 samples per student</small>
+              </div>
+            </article>
+            <article>
+              <span class="stat-icon amber" data-icon="train"></span>
+              <div>
+                <span>Recognition model</span
+                ><strong class="stat-word" id="model-count">Not trained</strong
+                ><small id="model-caption">Add students to get started</small>
+              </div>
+            </article>
+          </div>
+          <div class="section-heading">
+            <h2>Control panel</h2>
+            <span>Select a module to get started</span>
+          </div>
+          <div class="module-grid" id="module-grid"></div>
+          <div class="dashboard-bottom">
+            <section class="panel">
+              <div class="section-heading">
+                <h2>Getting started</h2>
+                <span>YOUR WORKFLOW</span>
+              </div>
+              <ol class="workflow">
+                <li>
+                  <a href="#students"
+                    ><b>01</b
+                    ><span
+                      >Add student details<small
+                        >Capture or upload three face samples</small
+                      ></span
+                    ><span aria-hidden="true">↗</span></a
+                  >
+                </li>
+                <li>
+                  <a href="#train"
+                    ><b>02</b
+                    ><span
+                      >Train your model<small
+                        >Prepare the enrolled faces for recognition</small
+                      ></span
+                    ><span aria-hidden="true">↗</span></a
+                  >
+                </li>
+                <li>
+                  <a href="#recognize"
+                    ><b>03</b
+                    ><span
+                      >Recognize & record<small
+                        >Review a match, then mark attendance</small
+                      ></span
+                    ><span aria-hidden="true">↗</span></a
+                  >
+                </li>
+              </ol>
+            </section>
+            <section class="panel">
+              <div class="section-heading">
+                <h2>Recent attendance</h2>
+                <a href="#attendance">View all ↗</a>
+              </div>
+              <div id="recent-attendance" class="recent-list"></div>
+            </section>
+          </div>
+        </section>
+        <section id="view-students" data-view="students" hidden>
+          <div class="two-column">
+            <section class="panel">
+              <div class="section-heading">
+                <h2 id="student-form-title">Add a student</h2>
+                <span class="badge">STUDENT PROFILE</span>
+              </div>
+              <form id="enroll-form">
+                <div class="fields">
+                  <label
+                    >Student ID<input
+                      id="student-id"
+                      required
+                      maxlength="40"
+                      placeholder="STU-001"
+                      title="Letters, numbers, hyphens and underscores" /></label
+                  ><label
+                    >Full name<input
+                      id="student-name"
+                      required
+                      maxlength="80"
+                      placeholder="Student name" /></label
+                  ><label
+                    >Department<input
+                      id="department"
+                      maxlength="80"
+                      placeholder="Computer Science" /></label
+                  ><label
+                    >Roll number<input
+                      id="roll-number"
+                      maxlength="40"
+                      placeholder="e.g. 24CS001" /></label
+                  ><label class="span-two"
+                    >Course<input
+                      id="course"
+                      maxlength="80"
+                      placeholder="e.g. B.Tech Computer Science"
+                  /></label>
+                </div>
+                <div id="enrollment-photos">
+                  <div class="form-section">
+                    <h3>Face samples</h3>
+                    <span id="sample-count">0 of 3 collected</span>
+                  </div>
+                  <p class="hint">
+                    Use three clear photos with small changes in angle or
+                    expression.
+                  </p>
+                  <div
+                    id="samples"
+                    class="samples"
+                    aria-label="Enrollment photos"
+                  ></div>
+                  <div class="row">
+                    <button type="button" id="capture-sample" class="secondary">
+                      Capture photo</button
+                    ><label class="file-button"
+                      >Upload photos<input
+                        type="file"
+                        id="enroll-upload"
+                        accept="image/jpeg,image/png"
+                        multiple /></label
+                    ><button
+                      type="button"
+                      class="text-button"
+                      id="reset-samples"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+                <div class="row form-actions">
+                  <button id="enroll-submit" type="submit">
+                    Save student & samples</button
+                  ><button
+                    id="cancel-edit"
+                    type="button"
+                    class="secondary"
+                    hidden
+                  >
+                    Cancel edit
+                  </button>
+                </div>
+                <p class="hint" id="enroll-hint">
+                  Next: open Train Data to train your recognition model.
+                </p>
+              </form>
+            </section>
+            <div id="student-camera-slot"></div>
+          </div>
+          <section class="panel list-panel">
+            <div class="section-heading">
+              <h2>Student directory</h2>
+              <label class="search-label"
+                ><span class="sr-only">Search students</span
+                ><input
+                  id="student-search"
+                  type="search"
+                  placeholder="Search students…"
+              /></label>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>ID / Roll no.</th>
+                    <th>Department / Course</th>
+                    <th>Samples</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="student-body"></tbody>
+              </table>
+            </div>
+            <p class="empty" id="empty-students">
+              Your directory is empty. Add your first student above.
+            </p>
+          </section>
+        </section>
+        <section id="view-recognize" data-view="recognize" hidden>
+          <div class="two-column">
+            <div id="recognition-camera-slot"></div>
+            <section class="panel">
+              <div class="section-heading">
+                <h2>Face Detector</h2>
+                <span class="badge">LIVE RECOGNITION</span>
+              </div>
+              <p class="muted">
+                Position one face in the camera. Start scanning or choose a
+                photo to compare against your trained students.
+              </p>
+              <div class="row">
+                <button id="start-scan" type="button">
+                  Start live recognition</button
+                ><button
+                  id="stop-scan"
+                  type="button"
+                  class="secondary"
+                  disabled
+                >
+                  Stop scanning
+                </button>
+              </div>
+              <div class="row separated">
+                <button id="recognize-capture" type="button" class="secondary">
+                  Recognize one frame</button
+                ><label class="file-button"
+                  >Upload a photo<input
+                    id="recognize-upload"
+                    type="file"
+                    accept="image/jpeg,image/png"
+                /></label>
+              </div>
+              <p class="hint" id="scan-status">Scanning is stopped.</p>
+              <div id="match-result" class="match">
+                <div class="empty-icon" data-icon="recognize"></div>
+                <h3>Waiting for a face</h3>
+                <p>
+                  Recognition results will appear here. Train your model before
+                  starting.
+                </p>
+              </div>
+              <button id="confirm-match" type="button" class="wide" hidden>
+                Confirm person & mark present
+              </button>
+              <p class="hint">
+                Review each match before recording. Attendance is recorded once
+                per student per UTC day.
+              </p>
+              <a class="inline-link" href="#train">Go to Train Data ↗</a>
+            </section>
+          </div>
+        </section>
+        <section id="view-train" data-view="train" hidden>
+          <div class="two-column">
+            <section class="panel training-panel">
+              <div class="training-art" data-icon="train"></div>
+              <p class="eyebrow">MODEL TRAINING</p>
+              <h2>Turn face samples into recognition.</h2>
+              <p class="muted">
+                Train the OpenCV LBPH model using the face samples in your
+                student directory. Retrain after adding or removing students.
+              </p>
+              <div class="training-summary">
+                <div>
+                  <strong id="train-students">0</strong><span>Students</span>
+                </div>
+                <div>
+                  <strong id="train-samples">0</strong><span>Face samples</span>
+                </div>
+              </div>
+              <button id="train-model" type="button">
+                Train recognition model
+              </button>
+              <p id="training-status" class="hint">
+                Add at least one student to begin.
+              </p>
+            </section>
+            <section class="panel">
+              <div class="section-heading">
+                <h2>Training dataset</h2>
+                <a href="#photos">View photos ↗</a>
+              </div>
+              <div id="training-list"></div>
+              <div class="tip">
+                <h3>For a better match</h3>
+                <p>
+                  Use even lighting, keep the face unobstructed, and vary your
+                  expression slightly between samples. Test with a fresh photo
+                  after training.
+                </p>
+              </div>
+              <a class="button secondary" href="#recognize"
+                >Open Face Detector ↗</a
+              >
+            </section>
+          </div>
+        </section>
+        <section id="view-photos" data-view="photos" hidden>
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <h2>Face sample gallery</h2>
+                <p class="muted">
+                  The normalized face crops used to train this session’s model.
+                </p>
+              </div>
+              <a class="button" href="#students">Add student photos</a>
+            </div>
+            <div id="photo-gallery" class="photo-gallery"></div>
+            <p id="empty-photos" class="empty">
+              No face samples yet. Add a student with three photos to build your
+              gallery.
+            </p>
+          </section>
+        </section>
+        <section id="view-attendance" data-view="attendance" hidden>
+          <section class="panel">
+            <div class="section-heading">
+              <div>
+                <h2>Attendance register</h2>
+                <p class="muted">
+                  Confirmed records from your current session.
+                </p>
+              </div>
+              <a class="button" href="/api/export" download>Export CSV ↗</a>
+            </div>
+            <div class="filters">
+              <label
+                >Search records<input
+                  id="attendance-search"
+                  type="search"
+                  placeholder="Student name or ID" /></label
+              ><label
+                >Date (UTC)<input id="attendance-date" type="date" /></label
+              ><button id="reset-filters" class="secondary" type="button">
+                Clear filters
+              </button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Student ID</th>
+                    <th>Department</th>
+                    <th>Date · UTC</th>
+                    <th>Time · UTC</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="attendance-body"></tbody>
+              </table>
+            </div>
+            <p id="empty-records" class="empty">
+              No attendance yet. Open Face Detector and confirm a recognition
+              result.
+            </p>
+            <p id="record-count" class="hint"></p>
+          </section>
+        </section>
+        <section id="view-help" data-view="help" hidden>
+          <section class="panel prose">
+            <h2>From enrollment to attendance</h2>
+            <ol>
+              <li>
+                <strong>Student Details:</strong> enter the student’s ID and
+                details. Confirm photo permission, then capture or upload three
+                JPEG/PNG photos showing one face each. Save the student.
+              </li>
+              <li>
+                <strong>Train Data:</strong> train the model once your students
+                are enrolled. Adding or removing students requires training
+                again.
+              </li>
+              <li>
+                <strong>Face Detector:</strong> enable your camera and start
+                live recognition, capture a single frame, or upload a fresh
+                photo. Scanning pauses when a possible match is found.
+              </li>
+              <li>
+                <strong>Attendance:</strong> verify the person’s identity and
+                confirm the match. Review the register and export a CSV before
+                leaving.
+              </li>
+            </ol>
+            <details>
+              <summary>My camera is unavailable</summary>
+              <p>
+                Allow camera access for this site in your browser and use HTTPS
+                or localhost. Another application may be using the camera.
+                Uploading photos also works.
+              </p>
+            </details>
+            <details>
+              <summary>No face or no close match</summary>
+              <p>
+                Use a front-facing photo with one unobstructed face and good
+                lighting. Add missing students and retrain the model. LBPH
+                distance measures similarity; it is not an accuracy percentage.
+              </p>
+            </details>
+            <details>
+              <summary>Where are my records?</summary>
+              <p>
+                Records and face samples belong to this browser session. They
+                expire after inactivity and are lost on server restart. Export
+                attendance regularly. The desktop MySQL database is separate.
+              </p>
+            </details>
+          </section>
+        </section>
+        <section id="view-about" data-view="about" hidden>
+          <section class="panel prose">
+            <p class="eyebrow">VISION ATTEND</p>
+            <h2>A complete attendance workflow.</h2>
+            <p>
+              This browser workspace brings the desktop project’s modules
+              together: student management, face capture, model training, face
+              recognition, photo gallery, and attendance records.
+            </p>
+            <div class="tech-list">
+              <span>Python / FastAPI</span><span>OpenCV / LBPH</span
+              ><span>Haar face detection</span>
+            </div>
+            <p>
+              The original desktop application uses Tkinter and MySQL. This
+              browser version uses isolated, temporary sessions and a model
+              trained from your own enrolled samples.
+            </p>
+            <p>
+              Recognition suggests a possible identity for human review. This
+              prototype has no liveness detection or measured real-world
+              accuracy and is not validated for official attendance decisions.
+            </p>
+            <a
+              class="button secondary"
+              href="https://github.com/quixoticalcoder/vision-attend"
+              target="_blank"
+              rel="noopener noreferrer"
+              >View project on GitHub ↗</a
+            >
+          </section>
+        </section>
+        <section id="view-settings" data-view="settings" hidden>
+          <section class="panel prose">
+            <h2>Your session & data</h2>
+            <p>
+              Photos are sent to this app’s server for face detection and
+              recognition. Face samples, learned descriptors, student details,
+              and attendance are held in memory for this browser session.
+            </p>
+            <ul>
+              <li>Up to 10 students, with 3 face samples each.</li>
+              <li>
+                Data is removed within 31 minutes of inactivity and on server
+                restart.
+              </li>
+              <li>
+                No permanent storage or synchronization with the desktop MySQL
+                database.
+              </li>
+            </ul>
+            <a class="button secondary" href="/api/export" download
+              >Export attendance CSV ↗</a
+            >
+            <hr />
+            <h3>Clear this session</h3>
+            <p>
+              This permanently removes your current face samples, model, student
+              details, and attendance. Export any records you need first.
+            </p>
+            <button id="clear-session" type="button" class="danger">
+              Delete my session data
+            </button>
+          </section>
+        </section>
+        <div id="camera-home" hidden>
+          <section class="panel camera-panel" id="camera-panel">
+            <div class="section-heading">
+              <h2>Camera preview</h2>
+              <span id="camera-status" class="badge">Camera off</span>
+            </div>
+            <div class="viewfinder">
+              <video id="video" autoplay muted playsinline hidden></video>
+              <div id="camera-placeholder">
+                <span data-icon="recognize"></span>
+                <h3>Ready to capture</h3>
+                <p>
+                  Enable your camera or upload a photo.<br />Keep one face in
+                  frame.
+                </p>
+              </div>
+              <div class="viewfinder-corners" aria-hidden="true"></div>
+            </div>
+            <div class="row">
+              <button id="start-camera" type="button">Enable camera</button
+              ><button
+                id="stop-camera"
+                class="secondary"
+                type="button"
+                disabled
+              >
+                Stop camera
+              </button>
+            </div>
+            <p class="hint">Your microphone is never requested.</p>
+            <label class="consent"
+              ><input type="checkbox" id="consent" /><span
+                >I have permission to process this person’s photos and record
+                demonstration attendance. Photos are processed on the
+                server.</span
+              ></label
+            >
+          </section>
+        </div>
+        <footer>
+          <span
+            ><span class="status-dot"></span> Vision Attend
+            <span class="footer-divider">/</span> Face recognition
+            attendance</span
+          ><a href="#settings">Temporary session · Export before leaving ↗</a>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>
