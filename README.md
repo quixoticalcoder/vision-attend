@@ -6,9 +6,9 @@ vision-attend uses Tkinter for its interface, MySQL for student and account reco
 
 **Desktop edition status:** the repository contains the application code, a Haar face detector, and a saved LBPH classifier. Most decorative UI images, the training-image directory, and database schema/data are missing. The desktop edition needs those resources. The browser edition below is independently runnable without them.
 
-## Open live application
+## Watch demo video
 
-https://vision-attend-a43s.onrender.com - no login required
+https://youtu.be/94YcejUg-9g?si=x8jYCCOI2byT-vKY
 
 
 ## Browser edition — free deployment
